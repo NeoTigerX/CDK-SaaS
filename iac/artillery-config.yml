@@ -1,0 +1,87 @@
+config:
+  target: 'https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/prod'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+    - duration: 120
+      arrivalRate: 10
+    - duration: 60
+      arrivalRate: 5
+  http:
+    timeout: 30
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+scenarios:
+  - name: "Health Check"
+    weight: 20
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+  - name: "Tenant Management"
+    weight: 40
+    flow:
+      - post:
+          url: "/tenants"
+          headers:
+            Authorization: "Bearer {{ $randomString() }}"
+          json:
+            name: "Test Tenant {{ $randomString() }}"
+            email: "test{{ $randomString() }}@example.com"
+            plan: "FREE"
+          expect:
+            - statusCode: [201, 401]  # 401 for auth failure, 201 for success
+      
+      - get:
+          url: "/tenants"
+          headers:
+            Authorization: "Bearer {{ $randomString() }}"
+          expect:
+            - statusCode: [200, 401]
+
+  - name: "Order Management"
+    weight: 40
+    flow:
+      - post:
+          url: "/orders"
+          headers:
+            Authorization: "Bearer {{ $randomString() }}"
+          json:
+            tenantId: "tenant_{{ $randomString() }}"
+            customerId: "customer_{{ $randomString() }}"
+            items:
+              - productId: "product_1"
+                name: "Test Product"
+                quantity: 1
+                unitPrice: 10.00
+                totalPrice: 10.00
+            currency: "USD"
+          expect:
+            - statusCode: [201, 401]
+      
+      - get:
+          url: "/orders"
+          headers:
+            Authorization: "Bearer {{ $randomString() }}"
+          expect:
+            - statusCode: [200, 401]
+
+  - name: "High Load Test"
+    weight: 10
+    flow:
+      - loop:
+          - get:
+              url: "/health"
+          - post:
+              url: "/tenants"
+              headers:
+                Authorization: "Bearer {{ $randomString() }}"
+              json:
+                name: "Load Test Tenant {{ $randomString() }}"
+                email: "loadtest{{ $randomString() }}@example.com"
+                plan: "BASIC"
+          count: 5
