@@ -68,9 +68,10 @@ Add these secrets to your GitHub repository:
 
 ### 2. Workflow
 The GitHub Actions workflow will automatically:
-- Run tests on every push/PR
-- Deploy to AWS on main branch pushes
-- Comment deployment status on PRs
+- Run the frontend dev server (`npm run start`) on every push/PR (in the `frontend` folder)
+- Deploy the IaC/CDK stack (`cdk deploy`) after installing dependencies (in the `iac` folder) on main branch pushes
+
+See `.github/workflows/deploy.yml` for details.
 
 ## Testing
 

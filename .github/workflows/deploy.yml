@@ -1,4 +1,4 @@
-name: Deploy CDK SaaS Infrastructure
+name: Deploy CDK SaaS Monorepo
 
 on:
   push:
@@ -11,115 +11,50 @@ env:
   NODE_VERSION: '18'
 
 jobs:
-  test:
+  frontend:
+    name: Frontend Dev Server
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
+      - name: Start frontend (dev)
+        run: npm run start
 
-      - name: Run tests
-        run: npm test
-
-      - name: Build project
-        run: npm run build
-
-      - name: CDK Synth
-        run: npm run synth
-
-  deploy:
-    needs: test
+  iac-deploy:
+    name: Deploy IaC (CDK)
     runs-on: ubuntu-latest
+    needs: frontend
+    defaults:
+      run:
+        working-directory: iac
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Build project
-        run: npm run build
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Bootstrap CDK
         run: npx cdk bootstrap
-
       - name: Deploy CDK Stack
-        run: npx cdk deploy --require-approval never
-
-      - name: Get API Gateway URL
-        id: get-api-url
-        run: |
-          API_URL=$(aws apigateway get-rest-apis --query 'items[?name==`SaaS API`].id' --output text)
-          echo "API_URL=https://${API_URL}.execute-api.${AWS_REGION}.amazonaws.com/prod" >> $GITHUB_OUTPUT
-
-      - name: Comment deployment info
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && comment.body.includes('🚀 Deployment completed')
-            );
-            
-            const body = `🚀 Deployment completed successfully!
-            
-            **API Gateway URL:** ${{ steps.get-api-url.outputs.API_URL }}
-            
-            **Available Endpoints:**
-            - \`GET /health\` - Health check
-            - \`POST /tenants\` - Create tenant
-            - \`GET /tenants\` - List tenants
-            - \`GET /tenants/{tenantId}\` - Get tenant
-            - \`PUT /tenants/{tenantId}\` - Update tenant
-            - \`DELETE /tenants/{tenantId}\` - Delete tenant
-            - \`POST /orders\` - Create order
-            - \`GET /orders\` - List orders
-            - \`GET /orders/{orderId}\` - Get order
-            - \`PUT /orders/{orderId}\` - Update order
-            - \`DELETE /orders/{orderId}\` - Delete order
-            
-            **Authentication:** All endpoints (except /health) require Cognito JWT token in Authorization header.`;
-            
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
+        run: npm run deploy -- --require-approval never
