@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./frontend
+        working-directory: frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
     needs: frontend
     defaults:
       run:
-        working-directory: ./iac
+        working-directory: iac
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
